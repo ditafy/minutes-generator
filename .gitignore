@@ -7,3 +7,4 @@ temp_*
 *.wav
 *.m4a
 *.docx
+models/

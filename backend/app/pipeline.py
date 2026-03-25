@@ -104,6 +104,139 @@ async def process_audio_to_markdown(
     if not sentences:
         sentences = [clean] if clean else []
 
+    # --- 结构化抽取：安排/未决（保守，只从明确表态句抽已定） ---
+    decision_keywords = [
+        "决定",
+        "确认",
+        "我们就",
+        "就这样",
+        "就按",
+        "从现在起",
+        "同意",
+        "通过",
+        "安排",
+        "要求",
+        "需要",
+        "请",
+        "务必",
+        "到",
+        "截止",
+        "最晚",
+        "完成",
+        "提交",
+        "发给",
+        "通知",
+        "落实",
+    ]
+
+    # 条件/不确定语义：出现则更倾向放到“待确认/未决”
+    conditional_keywords = [
+        "可能",
+        "考虑",
+        "看看",
+        "再看看",
+        "再商量",
+        "再讨论",
+        "等",
+        "等通知",
+        "不确定",
+        "看情况",
+        "待定",
+        "差不多",
+        "大概",
+        "应该",
+        "或许",
+        "到时候",
+    ]
+
+    open_keywords = [
+        "还没定",
+        "没定",
+        "未确定",
+        "待确认",
+        "需要再确认",
+        "还要再",
+        "下一次再",
+        "后面再",
+        "之后再",
+        "下次再",
+        "需要补充",
+    ]
+
+    # 从句子里抽“负责人”：只在句子里出现类似 {名词}{同学/老师/负责人/...} 时才填
+    name_suffixes = r"(同学|学长|学姐|老师|部长|负责人|主席|会长|队长|督导|指导老师)"
+    name_patterns = [
+        re.compile(rf"(?:由|请|麻烦)?([一-龥]{{2,4}}){name_suffixes}"),
+        re.compile(rf"([一-龥]{{2,4}}){name_suffixes}"),
+    ]
+
+    # 抽取截止/时间：尽量匹配“xx月xx日/xx号/周x/明天/后天”等
+    time_patterns = [
+        re.compile(r"(截止|最晚|到)\s*(\d{1,2})\s*月\s*(\d{1,2})\s*(日|号)"),
+        re.compile(r"(\d{1,2})\s*月\s*(\d{1,2})\s*(日|号)"),
+        re.compile(r"(下?周[一二三四五六日天])"),
+        re.compile(r"(明天|后天|今天)"),
+        re.compile(r"(最晚)\s*(\d{1,2})\s*号"),
+        re.compile(r"(到)\s*(\d{1,2})\s*号"),
+        re.compile(r"(这周末)"),
+    ]
+
+    def _extract_owner(s: str) -> str:
+        for pat in name_patterns:
+            m = pat.search(s)
+            if m:
+                # group(1) should be the name
+                name = m.group(1).strip()
+                if name:
+                    return name
+        return "负责人未明确"
+
+    def _extract_due(s: str) -> str:
+        for pat in time_patterns:
+            m = pat.search(s)
+            if m:
+                # 简单返回匹配到的整段
+                return m.group(0).strip()
+        return "时间未明确"
+
+    def _clean_action_text(s: str) -> str:
+        s = s.strip()
+        # 去掉常见口语前缀，避免 action 文本太啰嗦
+        s = re.sub(r"^(那我们|那就|接下来|下一步|好|行|所以|因此|我们就|我们先|我觉得|我看|大家|然后)\s*", "", s)
+        s = re.sub(r"\s+", " ", s)
+        if len(s) > 120:
+            s = s[:120].rstrip() + "…"
+        return s
+
+    def _is_decision(s: str) -> bool:
+        # 必须有“明确表态/安排/要求/完成类”关键词，且不能出现明显条件/不确定语义
+        has_decision = any(kw in s for kw in decision_keywords)
+        has_cond = any(kw in s for kw in conditional_keywords) or any(kw in s for kw in open_keywords)
+        return has_decision and not has_cond
+
+    def _is_open_issue(s: str) -> bool:
+        # 非已定句里，只要出现明显“未决/待确认/不确定/再讨论”等，就认为是未决事项候选
+        has_open = any(kw in s for kw in open_keywords)
+        has_cond = any(kw in s for kw in conditional_keywords)
+        return has_open or has_cond
+
+    decisions: list[str] = []
+    opens: list[str] = []
+    seen_dec = set()
+    seen_open = set()
+
+    for s in sentences:
+        if _is_decision(s):
+            txt = _clean_action_text(s)
+            if txt and txt not in seen_dec:
+                decisions.append(txt)
+                seen_dec.add(txt)
+        elif _is_open_issue(s):
+            txt = _clean_action_text(s)
+            if txt and txt not in seen_open:
+                opens.append(txt)
+                seen_open.add(txt)
+
     theme_to_snippets: Dict[str, list[str]] = {k: [] for k in themes_keywords.keys()}
     for s in sentences:
         matched: str | None = None
@@ -162,14 +295,22 @@ async def process_audio_to_markdown(
         md_lines.append("")
 
     md_lines.append("## 最后怎么决定的（安排/共识）")
-    md_lines.append(
-        "- 【待确认】本版本先完成离线 STT 与要点归类；决议/安排抽取尚未接入（负责人：负责人未明确；时间：时间未明确）"
-    )
+    if not decisions:
+        md_lines.append("- （未在转写中找到明确的已定安排/共识）")
+    else:
+        for action in decisions[:12]:
+            owner = _extract_owner(action)
+            due = _extract_due(action)
+            md_lines.append(f"- 【已定】{action}（负责人：{owner}；时间：{due}）")
     md_lines.append("")
     md_lines.append("## 还没定/需要再确认")
-    md_lines.append(
-        "- 【待确认】请接入后续的“决议/安排”抽取模块后再生成最终版安排（负责人：负责人未明确；时间：时间未明确）"
-    )
+    if not opens:
+        md_lines.append("- （未在转写中找到需要再确认的未决事项）")
+    else:
+        for action in opens[:12]:
+            owner = _extract_owner(action)
+            due = _extract_due(action)
+            md_lines.append(f"- 【待确认】{action}（负责人：{owner}；时间：{due}）")
     md_lines.append("")
     md_lines.append("## 还缺什么信息（从录音里没明确到）")
     md_lines.append("- 截止时间：时间未明确")

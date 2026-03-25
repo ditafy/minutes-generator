@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>社团会议纪要生成器（离线本地）</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>社团会议纪要生成器（离线本地）</h1>
+
+      <div class="card">
+        <h2>上传音频</h2>
+        <input id="audioInput" type="file" accept=".mp3,.m4a,.wav,audio/*" />
+
+        <div class="grid">
+          <label>
+            会议主题（可选）
+            <input id="meetingTitle" type="text" placeholder="例如：招新推进会" />
+          </label>
+          <label>
+            会议日期（可选）
+            <input id="meetingDate" type="text" placeholder="例如：2026-03-25" />
+          </label>
+          <label>
+            社团名称（可选）
+            <input id="clubName" type="text" placeholder="例如：XX社团" />
+          </label>
+        </div>
+
+        <button id="generateBtn">生成纪要</button>
+      </div>
+
+      <div class="card">
+        <h2>进度</h2>
+        <div class="row">
+          <div>阶段：<span id="stage">queued</span></div>
+          <div>进度：<span id="progress">0</span>%</div>
+        </div>
+        <div class="progress">
+          <div id="progressBar" class="bar"></div>
+        </div>
+        <div id="statusText" class="muted"></div>
+      </div>
+
+      <div class="card">
+        <h2>生成结果（Markdown）</h2>
+        <textarea id="output" readonly placeholder="生成结果会出现在这里..."></textarea>
+        <div class="row">
+          <button id="copyBtn" class="secondary">复制 Markdown</button>
+          <button id="downloadBtn" class="secondary">保存为 .md</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
+

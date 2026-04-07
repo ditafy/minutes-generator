@@ -1,7 +1,8 @@
 const audioInput = document.getElementById("audioInput");
-const meetingTitle = document.getElementById("meetingTitle");
+const meetingType = document.getElementById("meetingType");
 const meetingDate = document.getElementById("meetingDate");
-const clubName = document.getElementById("clubName");
+const useOnlineSummary = document.getElementById("useOnlineSummary");
+const meetingHint = document.getElementById("meetingHint");
 const generateBtn = document.getElementById("generateBtn");
 
 const stageEl = document.getElementById("stage");
@@ -13,6 +14,11 @@ const output = document.getElementById("output");
 const copyBtn = document.getElementById("copyBtn");
 const downloadBtn = document.getElementById("downloadBtn");
 
+const meetingHints = {
+  management_weekly: "管理层周例会将重点输出部门进展、协同问题、本周决定和 Todo。",
+  recruitment_prep: "招聘会筹备会议将重点输出本周进展、补充信息、下周重点、关键决策和 Todo。",
+};
+
 function setProgress(progress, stage, text) {
   progressEl.textContent = progress;
   stageEl.textContent = stage;
@@ -20,13 +26,21 @@ function setProgress(progress, stage, text) {
   statusText.textContent = text || "";
 }
 
+function updateMeetingHint() {
+  meetingHint.textContent = meetingHints[meetingType.value] || "";
+}
+
 async function pollJob(jobId) {
   while (true) {
     const res = await fetch(`/api/v1/jobs/${jobId}`);
     if (!res.ok) throw new Error(`job status failed: ${res.status}`);
     const data = await res.json();
-
-    setProgress(data.progress ?? 0, data.stage ?? data.status ?? "unknown", data.error ? `错误：${data.error}` : "");
+    const warningText = data.warning ? ` ${data.warning}` : "";
+    setProgress(
+      data.progress ?? 0,
+      data.stage ?? data.status ?? "unknown",
+      data.error ? `错误：${data.error}` : `${data.summaryMode || ""}${warningText}`.trim()
+    );
 
     if (data.status === "success") return data;
     if (data.status === "failed") throw new Error(data.error || "job failed");
@@ -53,23 +67,27 @@ generateBtn.addEventListener("click", async () => {
 
   const form = new FormData();
   form.append("audio", file);
-  form.append("meeting_title", meetingTitle.value || "");
+  form.append("meeting_type", meetingType.value);
   form.append("meeting_date", meetingDate.value || "");
-  form.append("club_name", clubName.value || "");
-
-  const res = await fetch("/api/v1/jobs", { method: "POST", body: form });
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`create job failed: ${res.status} ${errText}`);
-  }
-  const data = await res.json();
-  const jobId = data.jobId;
+  form.append("use_online_summary", useOnlineSummary.checked ? "true" : "false");
 
   try {
+    const res = await fetch("/api/v1/jobs", { method: "POST", body: form });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`create job failed: ${res.status} ${errText}`);
+    }
+    const data = await res.json();
+    const jobId = data.jobId;
+
     await pollJob(jobId);
     const result = await fetchResult(jobId);
     output.value = result.markdown || "";
-    setProgress(100, "done", "生成完成");
+
+    const doneText = result.warning
+      ? `生成完成。${result.warning}`
+      : `生成完成（${result.summaryMode || "offline"}）`;
+    setProgress(100, "done", doneText);
   } catch (e) {
     setProgress(progressEl.textContent, stageEl.textContent, `失败：${e.message}`);
   }
@@ -94,3 +112,5 @@ downloadBtn.addEventListener("click", () => {
   URL.revokeObjectURL(url);
 });
 
+meetingType.addEventListener("change", updateMeetingHint);
+updateMeetingHint();

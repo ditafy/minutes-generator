@@ -55,6 +55,36 @@ input[type="text"] {
   outline: none;
 }
 
+select {
+  padding: 8px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  outline: none;
+  background: #fff;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+}
+
+.checkbox-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+}
+
+.hint {
+  margin: 12px 0 0;
+  color: #334155;
+  font-size: 13px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
 button {
   padding: 10px 14px;
   border: none;
@@ -117,4 +147,3 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
-

@@ -11,7 +11,8 @@ from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadF
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .pipeline import process_audio_to_markdown
+from .pipeline import process_audio
+from .templates import MEETING_TYPES
 
 
 STATIC_DIR = Path(__file__).resolve().parent.parent.parent / "static"
@@ -21,13 +22,17 @@ STATIC_DIR = Path(__file__).resolve().parent.parent.parent / "static"
 class JobState:
     status: str = "queued"  # queued | running | success | failed
     progress: int = 0  # 0..100
-    stage: str = "queued"  # stt | clean | extract | render | queued | ...
+    stage: str = "queued"  # queued | transcribing | summarizing | rendering | done | failed
     error: Optional[str] = None
     result_markdown: Optional[str] = None
+    transcript: Optional[str] = None
+    structured_summary: Optional[Dict[str, Any]] = None
+    summary_mode: str = "offline"
+    warning: Optional[str] = None
     meta: Dict[str, Any] = field(default_factory=dict)
 
 
-app = FastAPI(title="Minutes Generator (Offline)")
+app = FastAPI(title="Minutes Generator")
 
 # Serve frontend
 if STATIC_DIR.exists():
@@ -58,13 +63,17 @@ def index():
 async def create_job(
     background_tasks: BackgroundTasks,
     audio: UploadFile = File(...),
-    meeting_title: str = Form(""),
+    meeting_type: str = Form(...),
     meeting_date: str = Form(""),
-    club_name: str = Form(""),
+    use_online_summary: str = Form("true"),
 ):
     # Minimal validation
     if not audio.filename:
         raise HTTPException(status_code=400, detail="missing audio filename")
+    if meeting_type not in MEETING_TYPES:
+        raise HTTPException(status_code=400, detail="unsupported meeting_type")
+
+    use_online = str(use_online_summary).lower() in {"1", "true", "yes", "y", "on"}
 
     job_id = str(uuid.uuid4())
     JOBS[job_id] = JobState(
@@ -72,9 +81,9 @@ async def create_job(
         progress=0,
         stage="queued",
         meta={
-            "meeting_title": meeting_title or None,
+            "meeting_type": meeting_type,
             "meeting_date": meeting_date or None,
-            "club_name": club_name or None,
+            "use_online_summary": use_online,
             "audio_filename": audio.filename,
         },
     )
@@ -91,14 +100,18 @@ async def create_job(
         job = _get_job(job_id)
         try:
             job.status = "running"
-            job.stage = "stt"
+            job.stage = "transcribing"
             job.progress = 5
-            md = await process_audio_to_markdown(
+            result = await process_audio(
                 audio_path=audio_path,
                 meta=job.meta,
                 on_stage=lambda stage, progress: _update_job(job_id, stage, progress),
             )
-            job.result_markdown = md
+            job.result_markdown = result["markdown"]
+            job.transcript = result["transcript"]
+            job.structured_summary = result["structured_summary"]
+            job.summary_mode = result["summary_mode"]
+            job.warning = result["warning"]
             job.status = "success"
             job.progress = 100
             job.stage = "done"
@@ -117,7 +130,9 @@ async def create_job(
 
     return {
         "jobId": job_id,
+        "status": "queued",
         "statusUrl": f"/api/v1/jobs/{job_id}",
+        "resultUrl": f"/api/v1/jobs/{job_id}/result",
     }
 
 
@@ -132,20 +147,30 @@ def _update_job(job_id: str, stage: str, progress: int) -> None:
 async def get_job(job_id: str):
     job = _get_job(job_id)
     return {
+        "jobId": job_id,
         "status": job.status,
         "progress": job.progress,
         "stage": job.stage,
         "error": job.error,
         "meta": job.meta,
+        "summaryMode": job.summary_mode,
+        "warning": job.warning,
     }
 
 
 @app.get("/api/v1/jobs/{job_id}/result")
 async def get_job_result(job_id: str):
     job = _get_job(job_id)
-    if job.status != "success" or not job.result_markdown:
+    if job.status != "success" or not job.result_markdown or not job.structured_summary:
         raise HTTPException(status_code=400, detail="result not ready")
     return {
+        "jobId": job_id,
+        "status": job.status,
+        "summaryMode": job.summary_mode,
+        "meetingType": job.meta.get("meeting_type"),
+        "meetingDate": job.meta.get("meeting_date"),
+        "transcript": job.transcript or "",
+        "structuredSummary": job.structured_summary,
         "markdown": job.result_markdown,
+        "warning": job.warning,
     }
-

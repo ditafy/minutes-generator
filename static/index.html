@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>社团会议纪要生成器（离线本地）</title>
+    <title>社团会议纪要生成器</title>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
     <div class="container">
-      <h1>社团会议纪要生成器（离线本地）</h1>
+      <h1>社团会议纪要生成器</h1>
 
       <div class="card">
         <h2>上传音频</h2>
@@ -16,17 +16,27 @@
 
         <div class="grid">
           <label>
-            会议主题（可选）
-            <input id="meetingTitle" type="text" placeholder="例如：招新推进会" />
+            会议类型
+            <select id="meetingType">
+              <option value="management_weekly">管理层周例会</option>
+              <option value="recruitment_prep">招聘会筹备会议</option>
+            </select>
           </label>
           <label>
             会议日期（可选）
             <input id="meetingDate" type="text" placeholder="例如：2026-03-25" />
           </label>
           <label>
-            社团名称（可选）
-            <input id="clubName" type="text" placeholder="例如：XX社团" />
+            在线结构化总结
+            <span class="checkbox-row">
+              <input id="useOnlineSummary" type="checkbox" checked />
+              <span>优先使用在线总结，失败时自动回退离线模式</span>
+            </span>
           </label>
+        </div>
+
+        <div id="meetingHint" class="hint">
+          管理层周例会将重点输出部门进展、协同问题、本周决定和 Todo。
         </div>
 
         <button id="generateBtn">生成纪要</button>
@@ -57,4 +67,3 @@
     <script src="/static/app.js"></script>
   </body>
 </html>
-

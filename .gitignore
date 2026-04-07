@@ -1,10 +1,41 @@
-venv/
-.env
+# macOS
+.DS_Store
+
+# Python caches
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.venv/
+backend/generator/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local model artifacts
+models/
+
+# Uploaded or generated local files
+backend/uploads/
 temp_*
+
+# Local audio and exported documents
 *.mp3
 *.wav
 *.m4a
 *.docx
-models/
+
+# Tooling and test outputs
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log

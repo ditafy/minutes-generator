@@ -20,7 +20,6 @@ def get_empty_summary(meeting_type: str) -> Dict[str, Any]:
     if meeting_type == "management_weekly":
         return {
             "meeting_type": meeting_type,
-            "overview": "",
             "department_updates": [],
             "coordination_issues": [],
             "weekly_decisions": [],
@@ -29,7 +28,6 @@ def get_empty_summary(meeting_type: str) -> Dict[str, Any]:
         }
     return {
         "meeting_type": meeting_type,
-        "overview": "",
         "weekly_progress": [],
         "additional_info": [],
         "next_week_focus": [],

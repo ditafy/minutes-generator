@@ -59,6 +59,27 @@ PENDING_KEYWORDS = [
     "看情况",
     "等通知",
     "不确定",
+    "未回复",
+    "尚未回复",
+    "没回",
+    "还没回",
+    "没消息",
+    "没下文",
+    "时间紧张",
+    "有点赶",
+    "来不及",
+    "赶不上",
+    "至少",
+    "需要",
+    "卡住了",
+    "还没落实",
+    "还没搞定",
+    "不招国际生",
+    "不招留学生",
+    "参与意愿低",
+    "不愿意参与",
+    "意愿不高",
+    "不太匹配",
 ]
 TODO_KEYWORDS = [
     "负责",
@@ -74,13 +95,19 @@ TODO_KEYWORDS = [
     "推进",
 ]
 TIME_PATTERNS = [
+    re.compile(r"((?:(?:本周|下周)?周|(?:本周|下周))[一二三四五六日天]\s*\d{1,2}\s*点(?:\s*-\s*\d{1,2}\s*点半?)?)"),
+    re.compile(r"((?:(?:本周|下周)?周|(?:本周|下周))[一二三四五六日天]\s*\d{1,2}\s*点半)"),
+    re.compile(r"((?:(?:本周|下周)?周|(?:本周|下周))[一二三四五六日天](?:前|上午|下午|晚上)?)"),
     re.compile(r"\d{1,2}月\d{1,2}[日号]?"),
     re.compile(r"(本周[一二三四五六日天]?前|下周[一二三四五六日天]?前|本周末|下周末)"),
     re.compile(r"(今天|明天|后天|今晚|本周|下周)"),
 ]
 OWNER_PATTERNS = [
     re.compile(r"(宣传部|活动部|外联部|组织部|人力部|技术部|秘书处|主席团|财务|ARC代表)"),
-    re.compile(r"([一-龥]{2,4})(同学|老师|主席|部长|负责人|代表)"),
+    re.compile(r"由\s*([A-Za-z][A-Za-z .-]{1,30})\s*负责"),
+    re.compile(r"([A-Za-z][A-Za-z .-]{1,30})\s*负责"),
+    re.compile(r"由\s*([一-龥A-Za-z]{2,20})(同学|老师|主席|部长|负责人|代表)\s*负责"),
+    re.compile(r"([一-龥A-Za-z]{2,20})(同学|老师|主席|部长|负责人|代表)"),
 ]
 
 
@@ -162,7 +189,6 @@ def summarize_offline(clean_text: str, meeting_type: str) -> Dict[str, Any]:
 
 def summarize_management_offline(sentences: list[str]) -> Dict[str, Any]:
     summary = get_empty_summary("management_weekly")
-    overview_topics = collect_overview_topics(sentences)
 
     for department, keywords in MANAGEMENT_DEPARTMENTS.items():
         related = [s for s in sentences if contains_any(s, keywords)]
@@ -183,10 +209,6 @@ def summarize_management_offline(sentences: list[str]) -> Dict[str, Any]:
     summary["weekly_decisions"] = take_unique([s for s in sentences if is_decision(s)], 6)
     summary["weekly_todos"] = build_todos([s for s in sentences if is_todo(s)], 8)
     summary["pending_items"] = take_unique([s for s in sentences if is_pending(s)], 6)
-    summary["overview"] = build_overview(
-        "本次管理层周例会主要围绕各部门本周推进情况、协同问题和本周任务安排展开。",
-        overview_topics,
-    )
     return summary
 
 
@@ -207,10 +229,6 @@ def summarize_recruitment_offline(sentences: list[str]) -> Dict[str, Any]:
     summary["key_decisions"] = take_unique([s for s in sentences if is_decision(s)], 6)
     summary["weekly_todos"] = build_todos([s for s in sentences if is_todo(s)], 8)
     summary["risks_or_pending"] = take_unique([s for s in sentences if is_pending(s)], 6)
-    summary["overview"] = build_overview(
-        "本次招聘会筹备会议主要回顾了本周进展，并整理了下周重点、关键决策和待办事项。",
-        collect_overview_topics(sentences),
-    )
     return summary
 
 
@@ -234,14 +252,7 @@ def render_markdown(
     ]
     if warning:
         lines.append(f"- 备注：{warning}")
-    lines.extend(
-        [
-            "",
-            "## 会议概览",
-            f"- {structured_summary.get('overview') or '本次会议已完成转写，但概览暂未提取成功。'}",
-            "",
-        ]
-    )
+    lines.append("")
 
     if meeting_type == "management_weekly":
         append_management_markdown(lines, structured_summary)
@@ -285,7 +296,11 @@ def append_recruitment_markdown(lines: list[str], summary: Dict[str, Any]) -> No
     lines.append("")
 
     lines.append("## 补充信息")
-    append_string_list(lines, summary.get("additional_info"), empty_text="暂未提取到明确的补充信息。")
+    append_mixed_string_list(
+        lines,
+        summary.get("additional_info"),
+        empty_text="暂未提取到明确的补充信息。",
+    )
     lines.append("")
 
     lines.append("## 下周重点")
@@ -322,15 +337,38 @@ def append_string_list(lines: list[str], items: list[str] | None, empty_text: st
         lines.append(f"- {item}")
 
 
-def append_todos(lines: list[str], items: list[Dict[str, str]] | None) -> None:
+def append_mixed_string_list(lines: list[str], items: list[str] | None, empty_text: str) -> None:
+    values = items or []
+    if not values:
+        lines.append(f"- {empty_text}")
+        return
+    for item in values:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        if should_render_as_paragraph(text):
+            lines.append(text)
+            lines.append("")
+        else:
+            lines.append(f"- {text}")
+
+
+def should_render_as_paragraph(text: str) -> bool:
+    sentence_count = len([part for part in re.split(r"[。！？!?]", text) if part.strip()])
+    return len(text) >= 90 or sentence_count >= 3
+
+
+def append_todos(lines: list[str], items: list[Dict[str, Any]] | None) -> None:
     todos = items or []
     if not todos:
         lines.append("- 暂未提取到明确的 Todo。")
         return
     for item in todos:
         status_label = "已确认" if item.get("status") == "confirmed" else "待确认"
+        owners = normalize_owners(item.get("owners") or item.get("owner"))
+        owner_text = "、".join(owners) if owners else "负责人未明确"
         lines.append(
-            f"- [{status_label}] {item.get('task')}（负责人：{item.get('owner')}；时间：{item.get('deadline')}）"
+            f"- [{status_label}] {item.get('task')}（负责人：{owner_text}；时间：{item.get('deadline')}）"
         )
 
 
@@ -346,39 +384,18 @@ def clean_sentence(text: str) -> str:
     return text
 
 
-def collect_overview_topics(sentences: list[str]) -> list[str]:
-    topics: list[str] = []
-    keyword_map = {
-        "招新": ["招新", "报名", "面试"],
-        "宣传": ["宣传", "海报", "推文"],
-        "活动安排": ["活动", "流程", "场地"],
-        "财务预算": ["财务", "预算", "报销"],
-        "企业联络": ["企业", "外联", "合作", "赞助"],
-    }
-    for label, keywords in keyword_map.items():
-        if any(contains_any(sentence, keywords) for sentence in sentences):
-            topics.append(label)
-    return topics[:4]
-
-
-def build_overview(default_text: str, topics: list[str]) -> str:
-    if not topics:
-        return default_text
-    return f"{default_text} 重点涉及：{'、'.join(topics)}。"
-
-
-def build_todos(sentences: list[str], limit: int) -> list[Dict[str, str]]:
-    todos: list[Dict[str, str]] = []
+def build_todos(sentences: list[str], limit: int) -> list[Dict[str, Any]]:
+    todos: list[Dict[str, Any]] = []
     seen: set[str] = set()
     for sentence in sentences:
-        task = sentence[:100].strip()
+        task = clean_todo_task(sentence)
         if not task or task in seen:
             continue
         seen.add(task)
         todos.append(
             {
                 "task": task,
-                "owner": extract_owner(sentence),
+                "owners": extract_owners(sentence),
                 "deadline": extract_deadline(sentence),
                 "status": "pending" if is_pending(sentence) else "confirmed",
             }
@@ -388,15 +405,80 @@ def build_todos(sentences: list[str], limit: int) -> list[Dict[str, str]]:
     return todos
 
 
-def extract_owner(sentence: str) -> str:
+def extract_owners(sentence: str) -> list[str]:
+    cleaned = clean_sentence(sentence)
+    owners: list[str] = []
+
+    list_match = re.search(
+        r"(?:由)?\s*([A-Za-z][A-Za-z .-]{1,20}|[一-龥]{2,6})\s*(?:和|与|跟|、|,|，)\s*([A-Za-z][A-Za-z .-]{1,20}|[一-龥]{2,6})(?:\s*一起)?\s*(负责|跟进|处理|完善|设计|联系|沟通|搭建|安排|发给|发送|提交|制作|准备)",
+        cleaned,
+    )
+    if list_match:
+        owners.extend([list_match.group(1).strip(), list_match.group(2).strip()])
+
     for pattern in OWNER_PATTERNS:
-        match = pattern.search(sentence)
-        if not match:
+        for match in pattern.finditer(cleaned):
+            owner = (match.group(1) if match.lastindex else match.group(0)).strip()
+            if owner:
+                owners.append(owner)
+
+    verb_match = re.search(
+        r"(?:由)?\s*([A-Za-z][A-Za-z .-]{1,20}|[一-龥]{2,6})\s*(?:负责|跟进|处理|完善|设计|联系|沟通|搭建)",
+        cleaned,
+    )
+    if verb_match:
+        owners.append(verb_match.group(1).strip())
+
+    assigned_match = re.search(r"安排\s*([A-Za-z][A-Za-z .-]{1,20}|[一-龥]{2,6})\s*处理", cleaned)
+    if assigned_match:
+        owners.append(assigned_match.group(1).strip())
+
+    return normalize_owners(owners)
+
+
+def normalize_owners(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        raw_items = value
+    else:
+        raw_items = [value]
+
+    owners: list[str] = []
+    for raw in raw_items:
+        text = str(raw or "").strip()
+        if not text:
             continue
-        if match.lastindex and match.lastindex >= 2:
-            return match.group(1).strip()
-        return match.group(0).strip()
-    return "负责人未明确"
+        text = re.sub(r"^负责人[:：]?\s*", "", text)
+        text = re.sub(r"(同学|老师|主席|部长|负责人|代表)$", "", text).strip()
+        parts = re.split(r"\s*(?:和|与|跟|、|,|，)\s*", text)
+        for part in parts:
+            cleaned = part.strip(" ，,;；。")
+            if cleaned and cleaned not in {"负责人未明确", "未明确", "一起"}:
+                owners.append(cleaned)
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for owner in owners:
+        if owner not in seen:
+            seen.add(owner)
+            deduped.append(owner)
+    return deduped
+
+
+def clean_todo_task(sentence: str) -> str:
+    cleaned = clean_sentence(sentence)
+    cleaned = re.sub(
+        r"^(?:由)?\s*(?:[A-Za-z][A-Za-z .-]{1,20}|[一-龥]{2,6})(?:\s*(?:和|与|跟|、|,|，)\s*(?:[A-Za-z][A-Za-z .-]{1,20}|[一-龥]{2,6}))*(?:\s*一起)?\s*(?=(负责|跟进|处理|完善|设计|联系|沟通|搭建))",
+        "",
+        cleaned,
+    )
+    cleaned = re.sub(r"^由\s*[A-Za-z][A-Za-z .-]{1,20}\s*负责\s*", "", cleaned)
+    cleaned = re.sub(r"^由\s*[一-龥]{2,6}\s*负责\s*", "", cleaned)
+    cleaned = re.sub(r"^(本周|下周)?周[一二三四五六日天](?:\s*\d{1,2}\s*点(?:\s*-\s*\d{1,2}\s*点半?)?)?\s*", "", cleaned)
+    cleaned = re.sub(r"^(本周|下周|今天|明天|后天|今晚|本周末|下周末)\s*", "", cleaned)
+    cleaned = re.sub(r"^(前|上午|下午|晚上)\s*", "", cleaned)
+    return cleaned[:100].strip(" ，,;；")
 
 
 def extract_deadline(sentence: str) -> str:
@@ -417,7 +499,18 @@ def is_decision(sentence: str) -> bool:
 
 
 def is_pending(sentence: str) -> bool:
-    return contains_any(sentence, PENDING_KEYWORDS)
+    lowered = sentence.lower()
+    if contains_any(sentence, PENDING_KEYWORDS):
+        return True
+    patterns = [
+        r"(至少|需要|还要)\s*\d+\s*(周|个月|月|天)",
+        r"(至少|需要|还要)\s*[一二两三四五六七八九十]+\s*(周|个月|月|天)",
+        r"(收到|等)\s*.*(proposal|邮件|材料|回复|消息).*(再决定|后再决定)",
+        r"(尚未|还没|未)\s*(回复|确认|落实|搞定|敲定|定下来)",
+        r"(没|没有)\s*(回|回复|消息|下文|反馈|答复|动静)",
+        r"(不招|不面向|不适合).*(国际生|留学生)",
+    ]
+    return any(re.search(pattern, lowered) for pattern in patterns)
 
 
 def is_todo(sentence: str) -> bool:

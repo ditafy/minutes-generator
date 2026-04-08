@@ -148,6 +148,7 @@ Notes:
 
 - `ONLINE_SUMMARY_API_URL` can point to any compatible chat-completions endpoint
 - If the request fails, the app automatically falls back to the local rule-based summary
+- Recruitment meeting summaries now bias toward longer section items: `本周进展`、`补充信息`、`下周重点` are prompted to produce 2-3 sentence entries instead of short fragments
 
 ## 3. Start the Backend
 

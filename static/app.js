@@ -1,33 +1,51 @@
 const audioInput = document.getElementById("audioInput");
+const fileName = document.getElementById("fileName");
 const meetingType = document.getElementById("meetingType");
 const meetingDate = document.getElementById("meetingDate");
 const useOnlineSummary = document.getElementById("useOnlineSummary");
-const meetingHint = document.getElementById("meetingHint");
 const generateBtn = document.getElementById("generateBtn");
 
-const stageEl = document.getElementById("stage");
-const progressEl = document.getElementById("progress");
-const progressBar = document.getElementById("progressBar");
+const transcribeStep = document.getElementById("transcribeStep");
+const summarizeStep = document.getElementById("summarizeStep");
 const statusText = document.getElementById("statusText");
 
 const output = document.getElementById("output");
 const copyBtn = document.getElementById("copyBtn");
 const downloadBtn = document.getElementById("downloadBtn");
 
-const meetingHints = {
-  management_weekly: "管理层周例会将重点输出部门进展、协同问题、本周决定和 Todo。",
-  recruitment_prep: "招聘会筹备会议将重点输出本周进展、补充信息、下周重点、关键决策和 Todo。",
+const stageLabels = {
+  queued: "等待开始",
+  transcribing: "正在识别音频内容...",
+  summarizing: "正在整理会议纪要...",
+  rendering: "正在生成 Markdown...",
+  done: "纪要已生成",
+  failed: "生成失败",
 };
 
-function setProgress(progress, stage, text) {
-  progressEl.textContent = progress;
-  stageEl.textContent = stage;
-  progressBar.style.width = `${progress}%`;
-  statusText.textContent = text || "";
+function setStepState(element, state) {
+  element.classList.remove("pending", "active", "done");
+  element.classList.add(state);
 }
 
-function updateMeetingHint() {
-  meetingHint.textContent = meetingHints[meetingType.value] || "";
+function setProgress(_progress, stage, text) {
+  if (stage === "transcribing") {
+    setStepState(transcribeStep, "active");
+    setStepState(summarizeStep, "pending");
+  } else if (stage === "summarizing" || stage === "rendering") {
+    setStepState(transcribeStep, "done");
+    setStepState(summarizeStep, "active");
+  } else if (stage === "done") {
+    setStepState(transcribeStep, "done");
+    setStepState(summarizeStep, "done");
+  } else if (stage === "failed") {
+    setStepState(transcribeStep, "done");
+    setStepState(summarizeStep, "pending");
+  } else {
+    setStepState(transcribeStep, "pending");
+    setStepState(summarizeStep, "pending");
+  }
+
+  statusText.textContent = text || stageLabels[stage] || stageLabels.queued;
 }
 
 async function pollJob(jobId) {
@@ -64,6 +82,7 @@ generateBtn.addEventListener("click", async () => {
 
   output.value = "";
   setProgress(0, "queued", "已提交，等待开始...");
+  generateBtn.disabled = true;
 
   const form = new FormData();
   form.append("audio", file);
@@ -89,8 +108,15 @@ generateBtn.addEventListener("click", async () => {
       : `生成完成（${result.summaryMode || "offline"}）`;
     setProgress(100, "done", doneText);
   } catch (e) {
-    setProgress(progressEl.textContent, stageEl.textContent, `失败：${e.message}`);
+    setProgress(0, "failed", `失败：${e.message}`);
+  } finally {
+    generateBtn.disabled = false;
   }
+});
+
+audioInput.addEventListener("change", () => {
+  const file = audioInput.files?.[0];
+  fileName.textContent = file ? file.name : "选择音频文件";
 });
 
 copyBtn.addEventListener("click", async () => {
@@ -112,5 +138,4 @@ downloadBtn.addEventListener("click", () => {
   URL.revokeObjectURL(url);
 });
 
-meetingType.addEventListener("change", updateMeetingHint);
-updateMeetingHint();
+setProgress(0, "queued", "等待音频");

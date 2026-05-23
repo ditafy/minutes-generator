@@ -7,61 +7,96 @@
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
-    <div class="container">
-      <h1>社团会议纪要生成器</h1>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">纪</div>
+          <h1>会议纪要生成器</h1>
+        </div>
 
-      <div class="card">
-        <h2>上传音频</h2>
-        <input id="audioInput" type="file" accept=".mp3,.m4a,.wav,audio/*" />
+        <section class="panel">
+          <h2>上传音频</h2>
+          <label class="upload-box" for="audioInput">
+            <span class="upload-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M12 16V4m0 0 4.5 4.5M12 4 7.5 8.5M5 16.5V19a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5" />
+              </svg>
+            </span>
+            <span id="fileName">选择音频文件</span>
+          </label>
+          <input id="audioInput" class="sr-only" type="file" accept=".mp3,.m4a,.wav,audio/*" />
 
-        <div class="grid">
-          <label>
-            会议类型
+          <label class="field">
+            <span>会议类型</span>
             <select id="meetingType">
               <option value="management_weekly">管理层周例会</option>
-              <option value="recruitment_prep">招聘会筹备会议</option>
+              <option value="recruitment_prep">招聘会筹备</option>
             </select>
           </label>
-          <label>
-            会议日期（可选）
-            <input id="meetingDate" type="text" placeholder="例如：2026-03-25" />
+
+          <label class="field">
+            <span>会议日期</span>
+            <input id="meetingDate" type="text" placeholder="2026-03-25" />
           </label>
-          <label>
-            在线结构化总结
-            <span class="checkbox-row">
-              <input id="useOnlineSummary" type="checkbox" checked />
-              <span>优先使用在线总结，失败时自动回退离线模式</span>
+
+          <label class="toggle-row">
+            <span>在线总结</span>
+            <input id="useOnlineSummary" type="checkbox" checked />
+          </label>
+
+          <button id="generateBtn" class="primary-btn">
+            <span aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M8 5v14l11-7Z" />
+              </svg>
             </span>
-          </label>
-        </div>
+            生成纪要
+          </button>
+        </section>
+      </aside>
 
-        <div id="meetingHint" class="hint">
-          管理层周例会将重点输出部门进展、协同问题、本周决定和 Todo。
-        </div>
+      <main class="workspace">
+        <section class="status-strip" aria-live="polite">
+          <div class="steps">
+            <div id="transcribeStep" class="step pending">
+              <span class="step-dot"></span>
+              <span>转录</span>
+            </div>
+            <span class="step-line" aria-hidden="true"></span>
+            <div id="summarizeStep" class="step pending">
+              <span class="step-dot"></span>
+              <span>总结</span>
+            </div>
+          </div>
+          <div id="statusText" class="status-text">等待音频</div>
+        </section>
 
-        <button id="generateBtn">生成纪要</button>
-      </div>
-
-      <div class="card">
-        <h2>进度</h2>
-        <div class="row">
-          <div>阶段：<span id="stage">queued</span></div>
-          <div>进度：<span id="progress">0</span>%</div>
-        </div>
-        <div class="progress">
-          <div id="progressBar" class="bar"></div>
-        </div>
-        <div id="statusText" class="muted"></div>
-      </div>
-
-      <div class="card">
-        <h2>生成结果（Markdown）</h2>
-        <textarea id="output" readonly placeholder="生成结果会出现在这里..."></textarea>
-        <div class="row">
-          <button id="copyBtn" class="secondary">复制 Markdown</button>
-          <button id="downloadBtn" class="secondary">保存为 .md</button>
-        </div>
-      </div>
+        <section class="result-panel">
+          <div class="result-header">
+            <h2>Markdown</h2>
+            <div class="actions">
+              <button id="copyBtn" class="ghost-btn" type="button">
+                <span aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <path d="M8 8h10v12H8z" />
+                    <path d="M6 16H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
+                  </svg>
+                </span>
+                复制
+              </button>
+              <button id="downloadBtn" class="ghost-btn" type="button">
+                <span aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <path d="M12 4v10m0 0 4-4m-4 4-4-4M5 20h14" />
+                  </svg>
+                </span>
+                下载
+              </button>
+            </div>
+          </div>
+          <textarea id="output" readonly placeholder="生成结果会出现在这里..."></textarea>
+        </section>
+      </main>
     </div>
 
     <script src="/static/app.js"></script>
